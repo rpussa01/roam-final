@@ -18,5 +18,28 @@ app.get('/api/places',async(req,res)=>{
  }catch(e){console.error('Places request:',e);err(res,502,'Could not connect to Google Places.');}
 });
 app.get('/api/photo',async(req,res)=>{const name=String(req.query.name||'');if(!/^places\/[^/]+\/photos\/[^/]+$/.test(name))return err(res,400,'Invalid photo reference');if(!key())return err(res,503,'API key missing');try{const r=await fetch(`https://places.googleapis.com/v1/${name}/media?maxWidthPx=1000&skipHttpRedirect=true`,{headers:{'X-Goog-Api-Key':key()}});const raw=await r.text();let data;try{data=JSON.parse(raw)}catch{return err(res,502,'Invalid photo response')}if(!r.ok||!data.photoUri)return err(res,502,'Photo unavailable');const photo=await fetch(data.photoUri);if(!photo.ok)return err(res,502,'Photo unavailable');res.set('Content-Type',photo.headers.get('content-type')||'image/jpeg');res.set('Cache-Control','private, max-age=300');res.send(Buffer.from(await photo.arrayBuffer()));}catch{return err(res,502,'Photo unavailable')}});
+
+// Authenticated AI planning: the API key never reaches the browser.
+app.post('/api/itinerary',async(req,res)=>{
+ if(!process.env.OPENAI_API_KEY)return err(res,503,'OpenAI is not configured. Add OPENAI_API_KEY to server environment.');
+ if(!process.env.VITE_SUPABASE_URL||!process.env.VITE_SUPABASE_ANON_KEY)return err(res,503,'Supabase authentication is not configured.');
+ const bearer=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+ if(!bearer)return err(res,401,'Sign in to generate AI itineraries.');
+ try{
+  const auth=await fetch(`${process.env.VITE_SUPABASE_URL}/auth/v1/user`,{headers:{apikey:process.env.VITE_SUPABASE_ANON_KEY,Authorization:`Bearer ${bearer}`}});
+  if(!auth.ok)return err(res,401,'Your session expired. Please sign in again.');
+  const {city,days,places,preferences,tripName,startDate,notes,previousPlan}=req.body||{};
+  if(!cities[city]||!Number.isInteger(days)||days<1||days>14||!Array.isArray(places)||places.length>60)return err(res,400,'Invalid itinerary inputs (1–14 days, maximum 60 places).');
+  const candidates=places.filter(p=>p&&typeof p.name==='string').slice(0,60).map(p=>({id:String(p.id||'').slice(0,120),name:p.name.slice(0,150),address:String(p.description||'').slice(0,200),lat:p.lat,lng:p.lng,category:p.category,openNow:p.openNow}));
+  const instructions=`You are ROAM, a careful travel itinerary planner. Return JSON only matching the supplied schema. Plan realistic routes, grouping geographically close places. Prioritise the user's saved places and preferences. Use only candidate place IDs for stops; do not invent venues. If there are too few candidates, schedule fewer stops and explain free time. Do not claim live opening hours, confirmed reservations, accurate transit times, or verified prices. Times are approximate local time, 24-hour HH:MM. Provide concise practical explanations. When refining, respect the requested changes and preserve unaffected days where feasible.`;
+  const payload={model:process.env.OPENAI_MODEL||'gpt-4.1-mini',instructions,input:JSON.stringify({city,days,tripName:String(tripName||'').slice(0,100),startDate:String(startDate||'').slice(0,20),notes:String(notes||'').slice(0,1000),preferences,candidates,previousPlan}),text:{format:{type:'json_schema',name:'roam_itinerary',strict:true,schema:{type:'object',additionalProperties:false,required:['summary','days'],properties:{summary:{type:'string'},days:{type:'array',items:{type:'object',additionalProperties:false,required:['day','theme','stops','tips'],properties:{day:{type:'integer'},theme:{type:'string'},tips:{type:'string'},stops:{type:'array',items:{type:'object',additionalProperties:false,required:['placeId','time','reason'],properties:{placeId:{type:'string'},time:{type:'string'},reason:{type:'string'}}}}}}}}}}},max_output_tokens:3500};
+  const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await r.json();if(!r.ok)return err(res,502,data.error?.message||'OpenAI itinerary generation failed.');
+  const output=data.output?.flatMap(x=>x.content||[]).find(x=>x.type==='output_text')?.text;
+  if(!output)return err(res,502,'AI returned no itinerary. Please try again.');
+  const plan=JSON.parse(output);const byId=new Map(candidates.map(p=>[p.id,p]));
+  res.json({summary:plan.summary,days:plan.days.slice(0,days).map(d=>({day:d.day,theme:d.theme,tips:d.tips,places:d.stops.filter(st=>byId.has(st.placeId)).map(st=>({...places.find(p=>String(p.id)===st.placeId),time:st.time,reason:st.reason}))}))});
+ }catch(e){console.error('AI itinerary error:',e);return err(res,502,'Could not generate the itinerary. Please retry.');}
+});
 app.use('/api',(req,res)=>err(res,404,`Unknown API route: ${req.path}`));
 export default app;

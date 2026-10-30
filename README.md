@@ -51,3 +51,7 @@ Saved places and trips are currently stored in the browser's localStorage, not s
 Signed-in users store saved places, trips and preferences in Supabase with per-user row-level security. Guest data stays in browser localStorage. Guest data is **not automatically imported** on sign-in; sign-in starts a separate cloud collection. User preferences are saved but do not yet alter Google Places search ranking or itinerary logic.
 
 Never put the Google Places secret or Supabase service-role key in `VITE_` environment variables.
+
+
+## AI smart itinerary planner (new)
+Add `OPENAI_API_KEY` to the server environment (never use a `VITE_` prefix for this secret). Optionally set `OPENAI_MODEL` (default `gpt-4.1-mini`). Configure `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and Google Places key as described above. Sign in, save places, then use **My Trip → Generate smart itinerary**. The backend validates the Supabase access token before calling the OpenAI Responses API with structured JSON output. Generated itineraries are stored in the existing `trips` table; users can refine saved AI plans. All times are suggestions; opening hours and transit are not independently verified. The avatar displays the user's first initial or an auth-provider avatar image.
