@@ -1,3 +1,4 @@
+import {registerAffiliateEngine} from './affiliate-engine.js';
 import express from 'express';
 const app=express();
 app.use(express.json());
@@ -107,5 +108,6 @@ app.get('/api/affiliate/status', (_req, res) => {
   res.json({ credentialsConfigured: Boolean(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && process.env.TRAVELPAYOUTS_MARKER),
     configuredCities: [...new Set([...Object.keys(VERIFIED_KLOOK_DESTINATIONS), ...configuredCities])], templateConfigured: Boolean(process.env.KLOOK_DESTINATION_URL_TEMPLATE) });
 });
+registerAffiliateEngine(app, cities);
 app.use('/api',(req,res)=>err(res,404,`Unknown API route: ${req.path}`));
 export default app;
