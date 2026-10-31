@@ -20,13 +20,13 @@ function BookingOptions({trip,startDate}){
  const stops=trip.days.flatMap(d=>d.places||[]);
  const area=stops[0]?.name||destination;
  const params={destination,city:destination,near:area,checkin:startDate||'',checkout:'',origin:'',query:`${destination} tours activities`};
- const [activity,setActivity]=useState({loading:true,url:null,error:null});
+ const [activity,setActivity]=useState({loading:true,url:null,error:null,tracked:false,fallback:false});
  useEffect(()=>{
-  const controller=new AbortController();setActivity({loading:true,url:null,error:null});
+  const controller=new AbortController();setActivity({loading:true,url:null,error:null,tracked:false,fallback:false});
   fetch(`/api/affiliate/klook?city=${encodeURIComponent(destination)}`,{signal:controller.signal})
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Booking unavailable');return d})
-   .then(d=>setActivity({loading:false,url:d.url,error:null}))
-   .catch(e=>{if(e.name!=='AbortError')setActivity({loading:false,url:null,error:e.message})});
+   .then(d=>setActivity({loading:false,url:d.url,error:null,tracked:!!d.tracked,fallback:!!d.fallback}))
+   .catch(e=>{if(e.name!=='AbortError')setActivity({loading:false,url:null,error:e.message,tracked:false,fallback:false})});
   return()=>controller.abort();
  },[destination]);
  const cards=[{key:'hotels',icon:'🏨',title:'Stay near your plans',detail:`Find accommodation near ${area}`,action:'Find stays'},
@@ -34,7 +34,7 @@ function BookingOptions({trip,startDate}){
  {key:'activities',icon:'🎟️',title:'Book experiences',detail:`Explore tours and activities in ${destination}`,action:'Explore activities'}];
  return <section className="bookingSection"><div className="bookingTitle"><div><span>YOUR TRIP, MADE EASY</span><h3>Ready to go?</h3></div><span className="bookingBadge">BOOK YOUR TRIP</span></div><div className="bookingCards">{cards.map(c=>{
   const link=c.key==='activities'?activity.url:partnerLink(PARTNERS[c.key],params);
-  return <div className="bookingCard" key={c.key}><div className="bookingIcon">{c.icon}</div><div className="bookingCopy"><strong>{c.title}</strong><small>{c.detail}</small>{link?<a href={link} target="_blank" rel="sponsored noopener noreferrer" className="bookingAction">{c.action} ↗</a>:<span className="bookingUnavailable">{c.key==='activities'?(activity.loading?'Finding experiences…':activity.error||'Experiences unavailable'):'Booking partner not configured'}</span>}</div></div>})}</div><p className="affiliateDisclosure">Booking links may be affiliate links. ROAM may earn a commission on eligible purchases at no extra cost to you. Prices and availability are provided by partners.</p></section>;
+  return <div className="bookingCard" key={c.key}><div className="bookingIcon">{c.icon}</div><div className="bookingCopy"><strong>{c.title}</strong><small>{c.detail}</small>{link?<a href={link} target="_blank" rel="sponsored noopener noreferrer" className="bookingAction">{c.key==='activities'&&activity.fallback?`Search ${destination} on Klook`:c.action} ↗</a>:<span className="bookingUnavailable">{c.key==='activities'?(activity.loading?'Finding experiences…':activity.error||'Experiences unavailable'):'Booking partner not configured'}</span>}{c.key==='activities'&&activity.fallback&&<small className="bookingUnavailable">Opens Klook homepage; search for {destination}. Not an affiliate link.</small>}</div></div>})}</div><p className="affiliateDisclosure">Booking links may be affiliate links. ROAM may earn a commission on eligible purchases at no extra cost to you. Prices and availability are provided by partners.</p></section>;
 }
 function App(){const[tab,setTab]=useState('discover'),[city,setCity]=useState('Bangkok'),[category,setCategory]=useState('All'),[places,setPlaces]=useState([]),[index,setIndex]=useState(0),[loading,setLoading]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(()=>persisted(STORE,[])),[trips,setTrips]=useState(()=>persisted(TRIPS,[])),[tripName,setTripName]=useState('My adventure'),[days,setDays]=useState(3),[selectedTrip,setSelectedTrip]=useState(null),[search,setSearch]=useState(''),[cityMenu,setCityMenu]=useState(false),[history,setHistory]=useState([]),[filterSaved,setFilterSaved]=useState('All'),[session,setSession]=useState(null),[authReady,setAuthReady]=useState(!supabase),[cloudReady,setCloudReady]=useState(!supabase),[accountOpen,setAccountOpen]=useState(false),[authMode,setAuthMode]=useState('signIn'),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authMessage,setAuthMessage]=useState(''),[authBusy,setAuthBusy]=useState(false),[prefs,setPrefs]=useState(()=>persisted(PREFS,DEFAULT_PREFS)),[profileName,setProfileName]=useState(''),[savingProfile,setSavingProfile]=useState(false),[aiBusy,setAiBusy]=useState(false),[aiError,setAiError]=useState(''),[startDate,setStartDate]=useState(''),[aiNotes,setAiNotes]=useState(''),[refinement,setRefinement]=useState('');
 useEffect(()=>{if(!supabase)return;supabase.auth.getSession().then(({data})=>{setSession(data.session);setAuthReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,next)=>{setSession(next);setCloudReady(false)});return()=>subscription.unsubscribe()},[]);

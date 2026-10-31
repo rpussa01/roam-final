@@ -59,14 +59,13 @@ function resolveKlookUrl(city) {
 async function klookAffiliate(req, res) {
   const city = String(req.method === 'POST' ? req.body?.city : req.query.city || '').trim();
   if (!Object.hasOwn(cities, city)) return err(res, 400, 'Choose a supported destination.');
-  if (!process.env.TRAVELPAYOUTS_API_TOKEN || !process.env.TRAVELPAYOUTS_TRS || !process.env.TRAVELPAYOUTS_MARKER)
-    return err(res, 503, 'Travelpayouts API credentials are not configured on the server.');
   let destinationUrl;
   try { destinationUrl = resolveKlookUrl(city); }
   catch (e) { return err(res, 503, e.message); }
-  if (!destinationUrl) return err(res, 503, `No verified Klook landing page is configured for ${city}. Add it to KLOOK_DESTINATION_URLS.`);
+  if (!destinationUrl) return res.json({city, url:'https://www.klook.com/', tracked:false, fallback:true, message:`Search for ${city} on Klook. Affiliate deep linking is not configured for this destination.`});
+  if (!process.env.TRAVELPAYOUTS_API_TOKEN || !process.env.TRAVELPAYOUTS_TRS || !process.env.TRAVELPAYOUTS_MARKER) return err(res,503,'Travelpayouts API credentials are not configured on the server.');
   const cached = affiliateCache.get(destinationUrl);
-  if (cached && cached.expires > Date.now()) return res.json({ city, url: cached.url, source: 'cache' });
+  if (cached && cached.expires > Date.now()) return res.json({ city, url: cached.url, source: 'cache', tracked:true });
   try {
     const response = await fetch('https://api.travelpayouts.com/links/v1/create', {
       method: 'POST',
@@ -90,7 +89,7 @@ async function klookAffiliate(req, res) {
     if (typeof candidate !== 'string' || !candidate.startsWith('https://'))
       return err(res, 502, 'Travelpayouts returned no valid affiliate link. Confirm the response schema for your account.');
     affiliateCache.set(destinationUrl, { url: candidate, expires: Date.now() + 6 * 60 * 60 * 1000 });
-    return res.json({ city, url: candidate, source: 'travelpayouts' });
+    return res.json({ city, url: candidate, source: 'travelpayouts', tracked:true });
   } catch (e) {
     console.error('Travelpayouts request failed:', e.message);
     return err(res, 502, 'Could not generate a Klook affiliate link right now.');
