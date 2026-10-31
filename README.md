@@ -55,3 +55,13 @@ Never put the Google Places secret or Supabase service-role key in `VITE_` envir
 
 ## AI smart itinerary planner (new)
 Add `OPENAI_API_KEY` to the server environment (never use a `VITE_` prefix for this secret). Optionally set `OPENAI_MODEL` (default `gpt-4.1-mini`). Configure `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and Google Places key as described above. Sign in, save places, then use **My Trip → Generate smart itinerary**. The backend validates the Supabase access token before calling the OpenAI Responses API with structured JSON output. Generated itineraries are stored in the existing `trips` table; users can refine saved AI plans. All times are suggestions; opening hours and transit are not independently verified. The avatar displays the user's first initial or an auth-provider avatar image.
+
+
+## Monetization (affiliate bookings and AdSense)
+
+The trip page now has a compact booking panel **after** the itinerary, with accommodation recommendations contextualized to the first planned stop, flights, and activities. Existing AI planning, Supabase accounts, saved places, and swiping remain unchanged.
+
+1. Set `VITE_HOTEL_AFFILIATE_URL`, `VITE_FLIGHT_AFFILIATE_URL`, and `VITE_ACTIVITY_AFFILIATE_URL` to HTTPS URLs issued by your affiliate programs. ROAM appends `destination`, `city`, `near`, `checkin`, `checkout`, `origin`, and `query`. **Important:** Providers use different parameter names; adjust `partnerLink` in `src/main.jsx` to the provider's documented URL scheme before launch. For networks with strict deep-link formats, use their approved deep-link builder or API instead. A generic URL with appended parameters is not guaranteed to perform a search or track commissions.
+2. Add your approved `VITE_ADSENSE_CLIENT` (`ca-pub-...`) and numeric `VITE_ADSENSE_SLOT`. AdSense script and slot only appear when configured. Ad serving depends on AdSense approval, inventory, and policy compliance.
+3. Before public launch, implement a privacy/consent solution appropriate for visitor regions (including Google-certified CMP where required), publish privacy and cookie disclosures, and configure any required ads.txt. Do not enable personalized ads before obtaining necessary consent.
+4. Booking buttons stay disabled when no partner URL is set. No commissions or live hotel pricing are claimed without integrations. The optional `/api/affiliate-click` beacon is best-effort only; no server-side event storage is configured.
