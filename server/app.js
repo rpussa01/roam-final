@@ -41,5 +41,68 @@ app.post('/api/itinerary',async(req,res)=>{
   res.json({summary:plan.summary,days:plan.days.slice(0,days).map(d=>({day:d.day,theme:d.theme,tips:d.tips,places:d.stops.filter(st=>byId.has(st.placeId)).map(st=>({...places.find(p=>String(p.id)===st.placeId),time:st.time,reason:st.reason}))}))});
  }catch(e){console.error('AI itinerary error:',e);return err(res,502,'Could not generate the itinerary. Please retry.');}
 });
+
+// Klook affiliate integration. A verified Klook landing URL is required for each
+// destination (or an explicitly verified provider URL template). Never guess IDs.
+const affiliateCache = new Map();
+function resolveKlookUrl(city) {
+  let mapping = {};
+  try { mapping = JSON.parse(process.env.KLOOK_DESTINATION_URLS || '{}'); }
+  catch { throw new Error('KLOOK_DESTINATION_URLS must be valid JSON'); }
+  const template = mapping[city] || process.env.KLOOK_DESTINATION_URL_TEMPLATE;
+  if (!template) return null;
+  const url = new URL(template.replaceAll('{destination}', encodeURIComponent(city)).replaceAll('{city}', encodeURIComponent(city)));
+  if (url.protocol !== 'https:' || !['klook.com', 'www.klook.com'].includes(url.hostname) || url.username || url.password)
+    throw new Error('Destination must be an HTTPS Klook URL');
+  return url.toString();
+}
+async function klookAffiliate(req, res) {
+  const city = String(req.method === 'POST' ? req.body?.city : req.query.city || '').trim();
+  if (!Object.hasOwn(cities, city)) return err(res, 400, 'Choose a supported destination.');
+  if (!process.env.TRAVELPAYOUTS_API_TOKEN || !process.env.TRAVELPAYOUTS_TRS || !process.env.TRAVELPAYOUTS_MARKER)
+    return err(res, 503, 'Travelpayouts API credentials are not configured on the server.');
+  let destinationUrl;
+  try { destinationUrl = resolveKlookUrl(city); }
+  catch (e) { return err(res, 503, e.message); }
+  if (!destinationUrl) return err(res, 503, `No verified Klook landing page is configured for ${city}. Add it to KLOOK_DESTINATION_URLS.`);
+  const cached = affiliateCache.get(destinationUrl);
+  if (cached && cached.expires > Date.now()) return res.json({ city, url: cached.url, source: 'cache' });
+  try {
+    const response = await fetch('https://api.travelpayouts.com/links/v1/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Access-Token': process.env.TRAVELPAYOUTS_API_TOKEN },
+      body: JSON.stringify({
+        trs: Number(process.env.TRAVELPAYOUTS_TRS),
+        marker: Number(process.env.TRAVELPAYOUTS_MARKER),
+        shorten: true,
+        links: [{ url: destinationUrl, sub_id: `roam-${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` }]
+      }),
+      signal: AbortSignal.timeout(12000)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Travelpayouts API HTTP status:', response.status);
+      return err(res, 502, 'Travelpayouts rejected the request. Check API token, partner access and link format.');
+    }
+    const item = data?.result?.links?.[0] || data?.links?.[0];
+    const candidate = item?.partner_url || item?.affiliate_url;
+    if (item?.code && item.code !== 'success') return err(res, 502, 'Travelpayouts did not approve this destination link.');
+    if (typeof candidate !== 'string' || !candidate.startsWith('https://'))
+      return err(res, 502, 'Travelpayouts returned no valid affiliate link. Confirm the response schema for your account.');
+    affiliateCache.set(destinationUrl, { url: candidate, expires: Date.now() + 6 * 60 * 60 * 1000 });
+    return res.json({ city, url: candidate, source: 'travelpayouts' });
+  } catch (e) {
+    console.error('Travelpayouts request failed:', e.message);
+    return err(res, 502, 'Could not generate a Klook affiliate link right now.');
+  }
+}
+app.get('/api/affiliate/klook', klookAffiliate);
+app.post('/api/affiliate/klook', klookAffiliate);
+app.get('/api/affiliate/status', (_req, res) => {
+  let configuredCities = [];
+  try { configuredCities = Object.keys(JSON.parse(process.env.KLOOK_DESTINATION_URLS || '{}')); } catch {}
+  res.json({ credentialsConfigured: Boolean(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && process.env.TRAVELPAYOUTS_MARKER),
+    configuredCities, templateConfigured: Boolean(process.env.KLOOK_DESTINATION_URL_TEMPLATE) });
+});
 app.use('/api',(req,res)=>err(res,404,`Unknown API route: ${req.path}`));
 export default app;
