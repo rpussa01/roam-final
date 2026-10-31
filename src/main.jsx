@@ -25,7 +25,7 @@ function BookingOptions({trip,startDate}){
   const controller=new AbortController();setActivity({loading:true,url:null,error:null,tracked:false,fallback:false});
   fetch(`/api/affiliate/klook?city=${encodeURIComponent(destination)}`,{signal:controller.signal})
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Booking unavailable');return d})
-   .then(d=>setActivity({loading:false,url:d.url,error:null,tracked:!!d.tracked,fallback:!!d.fallback}))
+   .then(d=>setActivity({loading:false,url:d.url||null,error:d.url?null:(d.message||'Experiences unavailable'),tracked:!!d.tracked,fallback:!!d.fallback}))
    .catch(e=>{if(e.name!=='AbortError')setActivity({loading:false,url:null,error:e.message,tracked:false,fallback:false})});
   return()=>controller.abort();
  },[destination]);

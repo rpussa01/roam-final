@@ -1,21 +1,31 @@
-# ROAM — Dynamic Klook affiliate links
+# ROAM dynamic Klook affiliate integration
 
-This is the complete ROAM React/Vite + Express project with a server-side Travelpayouts integration. The existing app, Supabase accounts, Google Places, AI itineraries, AdSense and UI are retained.
+ROAM automatically requests a commission-tracked Klook link for the selected itinerary city through its server-side Travelpayouts API. The browser never receives the API token.
 
-## Run locally
+## Configuration
 
-1. `cp .env.example .env` (or keep your existing `.env` when updating).
-2. Fill in your Google Places, Supabase and OpenAI settings.
-3. Set `TRAVELPAYOUTS_API_TOKEN`, `TRAVELPAYOUTS_TRS`, and `TRAVELPAYOUTS_MARKER` with values confirmed in your Travelpayouts account. **Never use `VITE_` for secrets.**
-4. Set `KLOOK_DESTINATION_URLS` to JSON containing **real, verified Klook destination page URLs**, e.g. `KLOOK_DESTINATION_URLS={"Bangkok":"https://www.klook.com/REAL-VERIFIED-PATH"}`. Do not copy the example path literally. Add destinations as verified. Alternatively, set `KLOOK_DESTINATION_URL_TEMPLATE` only if Klook/Travelpayouts confirms a supported URL pattern with `{destination}`.
-5. `npm install && npm run dev` and open the Vite URL.
-6. Check `http://localhost:5173/api/affiliate/status` to see whether configuration is present (does not reveal the token).
-7. Select a configured destination, create an itinerary, and open **Book experiences**. The backend generates a tracked link and caches it for six hours.
+Add the following to your local `.env` and to Vercel Project Settings > Environment Variables:
 
-## Important limitation
+```env
+TRAVELPAYOUTS_API_TOKEN=YOUR_NEW_PRIVATE_TOKEN
+TRAVELPAYOUTS_TRS=YOUR_VERIFIED_TRS
+TRAVELPAYOUTS_MARKER=YOUR_VERIFIED_MARKER
+KLOOK_DESTINATION_URLS={}
+```
 
-Travelpayouts' link API **converts an existing supported Klook landing page URL** into a tracked link; it does not search Klook for city pages. This package **does not fabricate Klook city URLs**. A city without a verified landing page shows a clear unavailable message rather than an incorrect affiliate link. The code handles any of ROAM's cities once a valid Klook URL is supplied. A fully zero-maintenance worldwide resolver would require an approved Klook destination-discovery API or a documented Klook URL pattern.
+The built-in **London** Klook landing page (`https://www.klook.com/destination/c106-london/`) was verified from the page supplied in this conversation. Other cities require verified Klook destination URLs, since Klook's numeric city IDs cannot be inferred from names. For example, add verified URLs using `KLOOK_DESTINATION_URLS={"Bangkok":"https://www.klook.com/destination/VERIFIED-ID-AND-SLUG/"}` (placeholder only; never deploy this example).
 
-## Production / Vercel
+The app selects the current trip city, resolves its verified Klook destination URL, calls the Travelpayouts partner links API, caches the resulting link for six hours, and enables the experiences card only after the API returns a valid affiliate link. If a city cannot be resolved, it explains the missing configuration rather than sending users to an unrelated homepage.
 
-Set the same server environment variables in your Vercel project settings and redeploy. `api/index.js` exports the Express app for Vercel. Never commit `.env` or keys. Rotate any keys that were exposed in screenshots or commits. Test the API endpoint after deployment before claiming links earn commissions. The API response parsing must be verified against your actual Travelpayouts account; no live request was performed here.
+## Run and test
+
+```sh
+npm install
+npm run dev
+```
+
+Check `/api/affiliate/status` for configuration (does not reveal secrets). Select London and open My Trip. The experiences button should become clickable **only after** a successful Travelpayouts API response. Verify the returned link lands on Klook's London page. Other cities need their Klook IDs verified through an approved destination lookup or curated URL mapping.
+
+## Deployment and security
+
+Deploy to Vercel after setting server-side environment variables, then redeploy. Do not prefix private tokens with `VITE_`. Rotate API tokens that appeared in earlier screenshots. A successful build does not confirm affiliate approval or attribution; test actual generated links with your Travelpayouts account.

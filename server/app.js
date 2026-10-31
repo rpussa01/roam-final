@@ -42,14 +42,18 @@ app.post('/api/itinerary',async(req,res)=>{
  }catch(e){console.error('AI itinerary error:',e);return err(res,502,'Could not generate the itinerary. Please retry.');}
 });
 
-// Klook affiliate integration. A verified Klook landing URL is required for each
-// destination (or an explicitly verified provider URL template). Never guess IDs.
+// Klook destination URLs must be verified: Klook uses numeric city IDs.
+// London is verified from the supplied Klook destination page. Additional destinations
+// can be supplied via KLOOK_DESTINATION_URLS without changing the application.
+const VERIFIED_KLOOK_DESTINATIONS = Object.freeze({
+  London: 'https://www.klook.com/destination/c106-london/'
+});
 const affiliateCache = new Map();
 function resolveKlookUrl(city) {
   let mapping = {};
   try { mapping = JSON.parse(process.env.KLOOK_DESTINATION_URLS || '{}'); }
   catch { throw new Error('KLOOK_DESTINATION_URLS must be valid JSON'); }
-  const template = mapping[city] || process.env.KLOOK_DESTINATION_URL_TEMPLATE;
+  const template = mapping[city] || VERIFIED_KLOOK_DESTINATIONS[city] || process.env.KLOOK_DESTINATION_URL_TEMPLATE;
   if (!template) return null;
   const url = new URL(template.replaceAll('{destination}', encodeURIComponent(city)).replaceAll('{city}', encodeURIComponent(city)));
   if (url.protocol !== 'https:' || !['klook.com', 'www.klook.com'].includes(url.hostname) || url.username || url.password)
@@ -62,7 +66,7 @@ async function klookAffiliate(req, res) {
   let destinationUrl;
   try { destinationUrl = resolveKlookUrl(city); }
   catch (e) { return err(res, 503, e.message); }
-  if (!destinationUrl) return res.json({city, url:'https://www.klook.com/', tracked:false, fallback:true, message:`Search for ${city} on Klook. Affiliate deep linking is not configured for this destination.`});
+  if (!destinationUrl) return res.json({city, url:null, tracked:false, fallback:false, message:`A verified Klook destination page is not available for ${city}. Configure KLOOK_DESTINATION_URLS to enable tracked bookings.`});
   if (!process.env.TRAVELPAYOUTS_API_TOKEN || !process.env.TRAVELPAYOUTS_TRS || !process.env.TRAVELPAYOUTS_MARKER) return err(res,503,'Travelpayouts API credentials are not configured on the server.');
   const cached = affiliateCache.get(destinationUrl);
   if (cached && cached.expires > Date.now()) return res.json({ city, url: cached.url, source: 'cache', tracked:true });
@@ -101,7 +105,7 @@ app.get('/api/affiliate/status', (_req, res) => {
   let configuredCities = [];
   try { configuredCities = Object.keys(JSON.parse(process.env.KLOOK_DESTINATION_URLS || '{}')); } catch {}
   res.json({ credentialsConfigured: Boolean(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && process.env.TRAVELPAYOUTS_MARKER),
-    configuredCities, templateConfigured: Boolean(process.env.KLOOK_DESTINATION_URL_TEMPLATE) });
+    configuredCities: [...new Set([...Object.keys(VERIFIED_KLOOK_DESTINATIONS), ...configuredCities])], templateConfigured: Boolean(process.env.KLOOK_DESTINATION_URL_TEMPLATE) });
 });
 app.use('/api',(req,res)=>err(res,404,`Unknown API route: ${req.path}`));
 export default app;
