@@ -4,6 +4,7 @@ const CITIES=['Bangkok','Bali','Tokyo','Melbourne','Perth','Singapore','London',
 // Use only affiliate deep-link templates supplied/approved by your partner.
 // Supported tokens: {destination}, {city}, {near}, {query}, {checkin}, {checkout}, {origin}.
 // Replacing tokens preserves existing partner tracking parameters; no invented parameters.
+// Direct, tracked flight booking link. This does not require the booking API or airport selection.
 const AVIASALES_AFFILIATE_URL='https://aviasales.tpx.lv/29Zr4QyL';
 const PARTNERS={hotels:import.meta.env.VITE_HOTEL_AFFILIATE_URL||'',flights:import.meta.env.VITE_FLIGHT_AFFILIATE_URL||'',activities:import.meta.env.VITE_KLOOK_DEEPLINK_TEMPLATE||import.meta.env.VITE_ACTIVITY_AFFILIATE_URL||''};
 function partnerLink(template,params){
@@ -35,7 +36,7 @@ function BookingOptions({trip,startDate}){
   return()=>controller.abort();
  },[destination,area,startDate,departureAirport,trip.startDate]);
  const cards=[{key:'hotels',icon:'🏨',title:'Stay near your plans',detail:`Find accommodation near ${area}`,action:'Find stays'},
- {key:'flights',icon:'✈️',title:'Get there',detail:departureAirport?`Compare flights from ${departureAirport} to ${destination}`:`Add a departure airport to search flights to ${destination}`,action:'Search flights'},
+ {key:'flights',icon:'✈️',title:'Get there',detail:departureAirport?`Compare flights from ${departureAirport} to ${destination}`:`Compare flights to ${destination} on Aviasales`,action:'Compare flights'},
  {key:'activities',icon:'🎟️',title:'Book experiences',detail:`Explore tours and activities in ${destination}`,action:'Explore activities'}];
  return <section className="bookingSection"><div className="bookingTitle"><div><span>YOUR TRIP, MADE EASY</span><h3>Ready to go?</h3></div><span className="bookingBadge">BOOK YOUR TRIP</span></div><div className="bookingCards">{cards.map(c=>{
   const item=booking.bookings[c.key];
