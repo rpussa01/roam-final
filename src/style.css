@@ -10,3 +10,11 @@ header{gap:10px}.accountButton{border:1px solid #36354b;border-radius:50%;width:
 .bookingSection{margin:18px 15px;padding:19px 15px;background:linear-gradient(145deg,#30253e,#201d33);border:1px solid #57405b;border-radius:19px}.bookingTitle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:15px}.bookingTitle span{font-size:9px;color:#ff93ad;letter-spacing:1.3px;font-weight:900}.bookingTitle h3{font:800 23px Outfit;margin:5px 0 0}.bookingBadge{white-space:nowrap;border:1px solid #69465e;border-radius:30px;padding:8px!important;font-size:8px!important}.bookingCards{display:grid;gap:10px}.bookingCard{display:flex;gap:13px;padding:13px;background:#1d1b2d;border:1px solid #3c344d;border-radius:13px}.bookingIcon{width:40px;height:40px;flex:none;display:grid;place-items:center;background:#3b2c43;border-radius:12px;font-size:22px}.bookingCopy{display:flex;flex-direction:column;gap:6px;min-width:0}.bookingCopy strong{font-size:13px}.bookingCopy small{font-size:11px;color:#b3acc3;line-height:1.5}.bookingAction{font-size:12px;font-weight:900;color:#ff8caa;margin-top:3px}.bookingUnavailable{font-size:11px;color:#8d899e}.affiliateDisclosure{font-size:10px;color:#aaa2b8;line-height:1.6;margin:14px 0 0}.adArea{margin:18px 15px;border:1px solid #3b354a;border-radius:12px;padding:12px;min-height:95px}.adArea>span{display:block;text-align:center;font-size:9px;letter-spacing:2px;color:#77748d;margin-bottom:10px}
 
 .departureHelp{display:block;margin-top:6px;color:#a5a4b4;font-size:12px;line-height:1.5}
+
+/* Flight booking controls */
+.flightSearchFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+.flightSearchFields label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#d4c5d7}
+.flightSearchFields input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #58415e;background:#211b2b;color:#fff;border-radius:8px;padding:8px;font:inherit;color-scheme:dark}
+.flightSearchFields .flightButton{grid-column:1/-1;border:0;text-align:center;cursor:pointer;padding:10px;border-radius:8px;background:#e976aa;color:#211427;font-weight:700}
+.flightSearchFields .flightButton:disabled{opacity:.6;cursor:wait}
+.flightSearchFields > small{grid-column:1/-1}

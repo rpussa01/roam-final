@@ -4,8 +4,7 @@ const CITIES=['Bangkok','Bali','Tokyo','Melbourne','Perth','Singapore','London',
 // Use only affiliate deep-link templates supplied/approved by your partner.
 // Supported tokens: {destination}, {city}, {near}, {query}, {checkin}, {checkout}, {origin}.
 // Replacing tokens preserves existing partner tracking parameters; no invented parameters.
-// Direct, tracked flight booking link. This does not require the booking API or airport selection.
-const AVIASALES_AFFILIATE_URL='https://aviasales.tpx.lv/29Zr4QyL';
+// Flight searches are converted to tracked partner links by the server; no generic homepage fallback.
 const PARTNERS={hotels:import.meta.env.VITE_HOTEL_AFFILIATE_URL||'',flights:import.meta.env.VITE_FLIGHT_AFFILIATE_URL||'',activities:import.meta.env.VITE_KLOOK_DEEPLINK_TEMPLATE||import.meta.env.VITE_ACTIVITY_AFFILIATE_URL||''};
 function partnerLink(template,params){
  if(!template)return null;
@@ -23,6 +22,26 @@ function BookingOptions({trip,startDate}){
  const stops=trip.days.flatMap(d=>d.places||[]);
  const area=stops[0]?.name||destination;
  const [booking,setBooking]=useState({loading:true,bookings:{},error:''});
+ const [flightState,setFlightState]=useState({loading:false,error:''});
+ const [flightDate,setFlightDate]=useState(trip.startDate||startDate||'');
+ const [flightReturn,setFlightReturn]=useState('');
+ const [flightOrigin,setFlightOrigin]=useState(departureAirport);
+ const [flightAdults,setFlightAdults]=useState(1);
+ async function openFlightSearch(){
+  if(!/^[A-Z]{3}$/.test(flightOrigin)||!flightDate){setFlightState({loading:false,error:'Enter your departure airport and flight date.'});return}
+  setFlightState({loading:true,error:''});
+  // Open a tab synchronously so browsers do not block it after the async request.
+  const tab=window.open('about:blank','_blank');
+  try{
+   const params=new URLSearchParams({city:destination,origin:flightOrigin,departureDate:flightDate,adults:String(flightAdults)});
+   if(flightReturn)params.set('returnDate',flightReturn);
+   const response=await fetch(`/api/affiliate/flights?${params}`);
+   const data=await response.json();
+   if(!response.ok||!data.tracked||!data.affiliateUrl)throw Error(data.error||'Tracked flight link unavailable');
+   if(tab){tab.opener=null;tab.location.replace(data.affiliateUrl)}else window.location.assign(data.affiliateUrl);
+   setFlightState({loading:false,error:''});
+  }catch(e){if(tab)tab.close();setFlightState({loading:false,error:e.message})}
+ }
  useEffect(()=>{
   const controller=new AbortController();
   setBooking({loading:true,bookings:{},error:''});
@@ -40,7 +59,7 @@ function BookingOptions({trip,startDate}){
  {key:'activities',icon:'🎟️',title:'Book experiences',detail:`Explore tours and activities in ${destination}`,action:'Explore activities'}];
  return <section className="bookingSection"><div className="bookingTitle"><div><span>YOUR TRIP, MADE EASY</span><h3>Ready to go?</h3></div><span className="bookingBadge">BOOK YOUR TRIP</span></div><div className="bookingCards">{cards.map(c=>{
   const item=booking.bookings[c.key];
-  return <div className="bookingCard" key={c.key}><div className="bookingIcon">{c.icon}</div><div className="bookingCopy"><strong>{c.title}</strong><small>{c.detail}</small>{c.key==='flights'?<a href={AVIASALES_AFFILIATE_URL} target="_blank" rel="sponsored noopener noreferrer" className="bookingAction">{c.action} ↗</a>:item?.tracked&&item.url?<a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="bookingAction">{c.action} ↗</a>:<span className="bookingUnavailable">{booking.loading?'Finding booking links…':booking.error||item?.message||'Partner not configured'}</span>}</div></div>})}</div><p className="affiliateDisclosure">ROAM may earn a commission from eligible bookings through verified partner links, at no extra cost to you. Prices and availability are provided by partners.</p></section>;
+  return <div className="bookingCard" key={c.key}><div className="bookingIcon">{c.icon}</div><div className="bookingCopy"><strong>{c.title}</strong><small>{c.detail}</small>{c.key==='flights'?<div className="flightSearchFields"><label>From (IATA)<input aria-label="Departure airport" maxLength="3" placeholder="PER" value={flightOrigin} onChange={e=>setFlightOrigin(e.target.value.replace(/[^a-z]/gi,'').toUpperCase())}/></label><label>Depart<input aria-label="Flight departure date" type="date" value={flightDate} onChange={e=>setFlightDate(e.target.value)}/></label><label>Return (optional)<input aria-label="Flight return date" type="date" min={flightDate} value={flightReturn} onChange={e=>setFlightReturn(e.target.value)}/></label><label>Adults<input aria-label="Adult passengers" type="number" min="1" max="9" value={flightAdults} onChange={e=>setFlightAdults(Number(e.target.value))}/></label><button className="bookingAction flightButton" disabled={flightState.loading} onClick={openFlightSearch}>{flightState.loading?'Creating tracked link…':'Search flights ↗'}</button>{flightState.error&&<small className="bookingUnavailable" role="alert">{flightState.error}</small>}<small>Flight dates and year should be confirmed on Aviasales.</small></div>:item?.tracked&&item.url?<a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="bookingAction">{c.action} ↗</a>:<span className="bookingUnavailable">{booking.loading?'Finding booking links…':booking.error||item?.message||'Partner not configured'}</span>}</div></div>})}</div><p className="affiliateDisclosure">ROAM may earn a commission from eligible bookings through verified partner links, at no extra cost to you. Prices and availability are provided by partners.</p></section>;
 }
 
 function App(){const[tab,setTab]=useState('discover'),[city,setCity]=useState('Bangkok'),[category,setCategory]=useState('All'),[places,setPlaces]=useState([]),[index,setIndex]=useState(0),[loading,setLoading]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(()=>persisted(STORE,[])),[trips,setTrips]=useState(()=>persisted(TRIPS,[])),[tripName,setTripName]=useState('My adventure'),[days,setDays]=useState(3),[selectedTrip,setSelectedTrip]=useState(null),[search,setSearch]=useState(''),[cityMenu,setCityMenu]=useState(false),[history,setHistory]=useState([]),[filterSaved,setFilterSaved]=useState('All'),[session,setSession]=useState(null),[authReady,setAuthReady]=useState(!supabase),[cloudReady,setCloudReady]=useState(!supabase),[accountOpen,setAccountOpen]=useState(false),[authMode,setAuthMode]=useState('signIn'),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authMessage,setAuthMessage]=useState(''),[authBusy,setAuthBusy]=useState(false),[prefs,setPrefs]=useState(()=>persisted(PREFS,DEFAULT_PREFS)),[profileName,setProfileName]=useState(''),[savingProfile,setSavingProfile]=useState(false),[aiBusy,setAiBusy]=useState(false),[aiError,setAiError]=useState(''),[startDate,setStartDate]=useState(''),[departureAirport,setDepartureAirport]=useState(''),[aiNotes,setAiNotes]=useState(''),[refinement,setRefinement]=useState('');

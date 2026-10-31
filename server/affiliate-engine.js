@@ -52,7 +52,53 @@ async function convertBatch(entries, city) {
   const body = await response.json();
   return body?.result?.links || [];
 }
+// Aviasales route URLs encode airport IATA codes, day/month and passenger count.
+// Confirm the selected dates on Aviasales: this path format does not encode a year.
+const ARRIVAL_AIRPORTS = {
+  Bangkok: 'BKK', Bali: 'DPS', Tokyo: 'TYO', Melbourne: 'MEL',
+  Perth: 'PER', Singapore: 'SIN', London: 'LON', 'New York': 'NYC',
+  Paris: 'PAR', Dubai: 'DXB', Sydney: 'SYD', Seoul: 'SEL', 'Sri Lanka': 'CMB'
+};
+function validDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+function dayMonth(date) { return date.slice(8, 10) + date.slice(5, 7); }
 export function registerAffiliateEngine(app, cities) {
+  app.get('/api/affiliate/flights', async (req, res) => {
+    const origin = String(req.query.origin || '').trim().toUpperCase();
+    const city = String(req.query.city || '').trim();
+    const destination = String(req.query.destination || ARRIVAL_AIRPORTS[city] || '').trim().toUpperCase();
+    const departureDate = String(req.query.departureDate || '');
+    const returnDate = String(req.query.returnDate || '');
+    const adults = Number(req.query.adults || 1);
+    if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || origin === destination ||
+        !validDate(departureDate) || (returnDate && !validDate(returnDate)) ||
+        (returnDate && returnDate <= departureDate) || !Number.isInteger(adults) || adults < 1 || adults > 9) {
+      return res.status(400).json({ error: 'Enter valid airports, departure/return dates and passengers.' });
+    }
+    const route = `${origin}${dayMonth(departureDate)}${destination}${returnDate ? dayMonth(returnDate) : ''}${adults}`;
+    const searchUrl = `https://www.aviasales.com/search/${route}`;
+    if (!(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && process.env.TRAVELPAYOUTS_MARKER)) {
+      return res.status(503).json({ error: 'Flight affiliate conversion is not configured on the server.' });
+    }
+    try {
+      const cached = CACHE.get(`flightsearch:${searchUrl}`);
+      if (cached && cached.expires > Date.now()) return res.json({ affiliateUrl: cached.url, tracked: true, searchUrl, note: 'Verify travel year and dates on the partner site.' });
+      const links = await convertBatch([{ kind: 'flights', original: searchUrl }], city || destination);
+      const link = links[0];
+      if (link?.code !== 'success' || typeof link.partner_url !== 'string' || !link.partner_url.startsWith('https://')) {
+        return res.status(502).json({ error: link?.message || 'Aviasales did not approve this flight search affiliate link.' });
+      }
+      CACHE.set(`flightsearch:${searchUrl}`, { url: link.partner_url, expires: Date.now() + TTL });
+      res.json({ affiliateUrl: link.partner_url, tracked: true, searchUrl, note: 'Verify travel year and dates on the partner site.' });
+    } catch (error) {
+      console.error('Flight affiliate conversion failed:', error.message);
+      res.status(502).json({ error: 'Unable to create a tracked flight search. Please try again.' });
+    }
+  });
+
   app.get('/api/affiliate/booking', async (req, res) => {
     const city = String(req.query.city || '').trim();
     if (!Object.hasOwn(cities, city)) return res.status(400).json({ error: 'Unsupported destination' });
