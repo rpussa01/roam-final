@@ -1,20 +1,30 @@
-# ROAM — fixed Aviasales flight button
+# Flight affiliate update
 
-The **Get there** card now always displays **Compare flights ↗**, which links directly to https://aviasales.tpx.lv/29Zr4QyL in a new tab. It does not depend on the affiliate booking API or departure airport. This is a general affiliate link; it does not prefill airports or dates.
+Search flights builds an Aviasales route from the selected origin, destination,
+departure, optional return and adults. The search URL includes your configured
+marker, then the server converts it using the official Travelpayouts links API.
+The browser opens only the returned validated affiliate URL. Conversion failures
+show an error; they never fall back to an untracked search.
 
-Hotel links still need a configured hotel affiliate program. Activity links continue to use the existing affiliate backend.
+## Setup
+Keep your existing .env.local. Ensure it contains:
 
-## Deploy
+```
+TRAVELPAYOUTS_API_TOKEN=your_private_token
+TRAVELPAYOUTS_TRS=593702
+TRAVELPAYOUTS_MARKER=798359
+```
 
-1. Extract this ZIP.
-2. Copy the files from `roam-rebuilt/` into the ROOT of your existing `roam-final` GitHub repository (do not nest the `roam-rebuilt` directory).
-3. In that repository, run:
+Enable Aviasales for that project in Travelpayouts. Never use a VITE_ prefix for
+the private token. Restart the server after changing configuration.
 
-   git add .
-   git commit -m "Fix ROAM Aviasales flight button"
-   git push origin main
+Run `npm install`, `npm run build`, then `npm start` (or `npm run dev`).
+The public IDs above are prefilled in .env.example; no private token is bundled.
 
-4. In Vercel, verify the latest production deployment is Ready and its commit matches the push.
-5. Hard-refresh your deployed site (Cmd+Shift+R). If it still shows the old flight card, verify Vercel's Production domain and connected branch.
+The fixed homepage shortlink is not used because it cannot preserve each chosen
+route. Search paths encode day/month, not year: confirm dates on Aviasales.
+Internal navigation may remove visible tracking parameters. Confirm clicks and
+eligible bookings in Travelpayouts; URL validation cannot guarantee commission.
 
-Existing environment variables should be retained in Vercel; do not overwrite them with placeholders from `.env.example`.
+Validation: `node --test tests/flight-affiliate.test.js` uses mocked partner API
+responses. Live attribution requires your credentials and dashboard verification.

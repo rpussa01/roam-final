@@ -65,6 +65,19 @@ function validDate(value) {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 function dayMonth(date) { return date.slice(8, 10) + date.slice(5, 7); }
+function validFlightPartnerUrl(raw, marker) {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+    if (['aviasales.com', 'www.aviasales.com', 'aviasales.ge', 'www.aviasales.ge'].includes(url.hostname)) {
+      const value = url.searchParams.get('marker') || '';
+      return value === marker || value.startsWith(`${marker}.`);
+    }
+    // Accept Travelpayouts tracking redirects only after a successful API conversion.
+    return url.hostname === 'tp.media' || url.hostname === 'avs.io' ||
+      url.hostname.endsWith('.tpx.lv') || url.hostname.endsWith('.tp.st');
+  } catch { return false; }
+}
 export function registerAffiliateEngine(app, cities) {
   app.get('/api/affiliate/flights', async (req, res) => {
     const origin = String(req.query.origin || '').trim().toUpperCase();
@@ -79,19 +92,20 @@ export function registerAffiliateEngine(app, cities) {
       return res.status(400).json({ error: 'Enter valid airports, departure/return dates and passengers.' });
     }
     const route = `${origin}${dayMonth(departureDate)}${destination}${returnDate ? dayMonth(returnDate) : ''}${adults}`;
-    const searchUrl = `https://www.aviasales.com/search/${route}`;
-    if (!(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && process.env.TRAVELPAYOUTS_MARKER)) {
+    const marker = String(process.env.TRAVELPAYOUTS_MARKER || '').trim();
+    const searchUrl = `https://www.aviasales.com/search/${route}?marker=${encodeURIComponent(marker)}`;
+    if (!(process.env.TRAVELPAYOUTS_API_TOKEN && process.env.TRAVELPAYOUTS_TRS && /^[1-9]\d*$/.test(marker))) {
       return res.status(503).json({ error: 'Flight affiliate conversion is not configured on the server.' });
     }
     try {
-      const cached = CACHE.get(`flightsearch:${searchUrl}`);
+      const cached = CACHE.get(`flightsearch:${process.env.TRAVELPAYOUTS_TRS}:${searchUrl}`);
       if (cached && cached.expires > Date.now()) return res.json({ affiliateUrl: cached.url, tracked: true, searchUrl, note: 'Verify travel year and dates on the partner site.' });
       const links = await convertBatch([{ kind: 'flights', original: searchUrl }], city || destination);
       const link = links[0];
-      if (link?.code !== 'success' || typeof link.partner_url !== 'string' || !link.partner_url.startsWith('https://')) {
+      if (link?.code !== 'success' || !validFlightPartnerUrl(link.partner_url, marker)) {
         return res.status(502).json({ error: link?.message || 'Aviasales did not approve this flight search affiliate link.' });
       }
-      CACHE.set(`flightsearch:${searchUrl}`, { url: link.partner_url, expires: Date.now() + TTL });
+      CACHE.set(`flightsearch:${process.env.TRAVELPAYOUTS_TRS}:${searchUrl}`, { url: link.partner_url, expires: Date.now() + TTL });
       res.json({ affiliateUrl: link.partner_url, tracked: true, searchUrl, note: 'Verify travel year and dates on the partner site.' });
     } catch (error) {
       console.error('Flight affiliate conversion failed:', error.message);

@@ -1,17 +1,30 @@
-# ROAM — itinerary-specific flight affiliate search
+# Flight affiliate update
 
-The **Get there** card collects an origin IATA code, departure date, optional return date and adult count. Destination airport is mapped server-side from the trip city. It requests `/api/affiliate/flights` and only opens a link when Travelpayouts returns a successful tracked URL. No untracked fallback is used.
+Search flights builds an Aviasales route from the selected origin, destination,
+departure, optional return and adults. The search URL includes your configured
+marker, then the server converts it using the official Travelpayouts links API.
+The browser opens only the returned validated affiliate URL. Conversion failures
+show an error; they never fall back to an untracked search.
 
-## Required Vercel server environment variables
+## Setup
+Keep your existing .env.local. Ensure it contains:
 
-- `TRAVELPAYOUTS_API_TOKEN` (secret; server only)
-- `TRAVELPAYOUTS_TRS=593702`
-- `TRAVELPAYOUTS_MARKER=798359`
+```
+TRAVELPAYOUTS_API_TOKEN=your_private_token
+TRAVELPAYOUTS_TRS=593702
+TRAVELPAYOUTS_MARKER=798359
+```
 
-The Aviasales program must be active in your Travelpayouts account and must accept route search URLs. Deploy after adding variables.
+Enable Aviasales for that project in Travelpayouts. Never use a VITE_ prefix for
+the private token. Restart the server after changing configuration.
 
-## Limitations
+Run `npm install`, `npm run build`, then `npm start` (or `npm run dev`).
+The public IDs above are prefilled in .env.example; no private token is bundled.
 
-Aviasales route paths such as `/search/PER1502CMB31031` do **not encode the year**. Users must verify the actual travel year and dates on the partner website. Confirm Aviasales still supports this route syntax and the Travelpayouts conversion API for your account before launch. City-to-airport mapping uses representative airports (e.g. Tokyo TYO, Bali DPS, Sri Lanka CMB), not automatic nearest-airport selection.
+The fixed homepage shortlink is not used because it cannot preserve each chosen
+route. Search paths encode day/month, not year: confirm dates on Aviasales.
+Internal navigation may remove visible tracking parameters. Confirm clicks and
+eligible bookings in Travelpayouts; URL validation cannot guarantee commission.
 
-If conversion fails, the UI displays an error rather than falsely labeling a generic URL affiliate-tracked.
+Validation: `node --test tests/flight-affiliate.test.js` uses mocked partner API
+responses. Live attribution requires your credentials and dashboard verification.
