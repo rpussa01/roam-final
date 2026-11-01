@@ -18,3 +18,6 @@ header{gap:10px}.accountButton{border:1px solid #36354b;border-radius:50%;width:
 .flightSearchFields .flightButton{grid-column:1/-1;border:0;text-align:center;cursor:pointer;padding:10px;border-radius:8px;background:#e976aa;color:#211427;font-weight:700}
 .flightSearchFields .flightButton:disabled{opacity:.6;cursor:wait}
 .flightSearchFields > small{grid-column:1/-1}
+
+/* Editorial landing pages: separate substantial travel content from interactive screens. */
+.editorialHome{padding:14px 0 50px;line-height:1.7}.editorialHome>h2{font-size:1.4rem;margin:35px 0 12px}.editorialHome>p{color:#bfc1d2}.guideGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.guideGrid a{min-height:150px;padding:19px;border:1px solid #343347;border-radius:19px;background:#1c1b2b;color:white;text-decoration:none;display:flex;flex-direction:column;gap:8px}.guideGrid strong{font-size:1.3rem}.guideGrid span{font-size:.85rem;color:#c6c4d3}.guideGrid span:last-child{margin-top:auto;color:#ff8eb3}.guideFoot{display:flex;flex-wrap:wrap;gap:16px;margin-top:28px}.guideFoot a{color:#ff9cbd}@media(max-width:450px){.guideGrid{grid-template-columns:1fr}}
