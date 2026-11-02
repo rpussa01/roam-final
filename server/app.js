@@ -7,15 +7,36 @@ const types={All:['tourist_attraction','restaurant','cafe','night_club','bar','m
 const key=()=>process.env.GOOGLE_PLACES_API_KEY?.trim();
 const err=(res,code,msg)=>res.status(code).json({error:msg});
 app.get('/api/health',(_req,res)=>res.json({status:'ok',configured:!!key()&&key()!=='your_google_places_api_key_here',cities:Object.keys(cities),categories:Object.keys(types)}));
+// Progressive discovery: Nearby Search has no pagination. Use paginated Text Search
+// with varied queries, passing a bounded opaque cursor back to the browser.
+const discoveryQueries={
+ All:['best things to do','popular attractions','local restaurants','cafes','nightlife','hidden gems','parks and museums'],
+ Nightlife:['nightclubs','rooftop bars','cocktail bars','live music venues','nightlife streets and districts','late night bars'],
+ 'Cafés':['popular cafes','specialty coffee shops','brunch cafes','dessert cafes'],
+ Food:['best restaurants','local food restaurants','street food markets','fine dining restaurants'],
+ Attractions:['tourist attractions','museums','parks and gardens','historic landmarks','famous streets'],
+ Experiences:['things to do','adventure activities','cultural experiences','amusement parks'],
+ Stays:['hotels','boutique hotels','hostels','resorts']
+};
+const fieldMask='places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.photos,places.primaryType,places.googleMapsUri,places.websiteUri,places.currentOpeningHours.openNow,places.priceLevel,nextPageToken';
+const decodeCursor=value=>{if(!value)return {q:0,token:null};try{const v=JSON.parse(Buffer.from(String(value),'base64url').toString());if(Number.isInteger(v.q)&&v.q>=0&&v.q<20&&(v.token===null||typeof v.token==='string'&&v.token.length<4096))return v;}catch{}return null};
+const encodeCursor=v=>Buffer.from(JSON.stringify(v)).toString('base64url');
 app.get('/api/places',async(req,res)=>{
  const city=String(req.query.city||'Bangkok'),category=String(req.query.category||'All');
  if(!cities[city]||!types[category])return err(res,400,'Unknown city or category');
  if(!key()||key()==='your_google_places_api_key_here')return err(res,503,'Google Places API key is not configured on the server.');
+ const cursor=decodeCursor(req.query.cursor);if(!cursor)return err(res,400,'Invalid discovery cursor');
+ const queries=discoveryQueries[category];
+ if(cursor.q>=queries.length)return res.json({city,category,places:[],nextCursor:null});
  try{
   const [latitude,longitude]=cities[city];
-  const r=await fetch('https://places.googleapis.com/v1/places:searchNearby',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key(),'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.photos,places.primaryType,places.googleMapsUri,places.websiteUri,places.currentOpeningHours.openNow,places.priceLevel'},body:JSON.stringify({includedTypes:types[category],maxResultCount:20,rankPreference:'POPULARITY',locationRestriction:{circle:{center:{latitude,longitude},radius:city==='Bali'?18000:city==='Sri Lanka'?30000:12000}}})});
+  // Page tokens must be replayed with identical search parameters.
+  const body={textQuery:`${queries[cursor.q]} in ${city}`,pageSize:20,locationBias:{circle:{center:{latitude,longitude},radius:city==='Sri Lanka'?30000:city==='Bali'?18000:12000}}};
+  if(cursor.token)body.pageToken=cursor.token;
+  const r=await fetch('https://places.googleapis.com/v1/places:searchText',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key(),'X-Goog-FieldMask':fieldMask},body:JSON.stringify(body)});
   const raw=await r.text();let data;try{data=JSON.parse(raw)}catch{return err(res,502,'Places service returned an unexpected response.')}if(!r.ok)return err(res,r.status,data.error?.message||'Google Places request failed');
-  res.set('Cache-Control','private, max-age=120');res.json({city,category,attribution:'Place information provided by Google Maps',places:(data.places||[]).map(p=>({id:p.id,name:p.displayName?.text||'Unnamed place',city,category,description:p.formattedAddress||'',rating:p.rating??null,reviews:p.userRatingCount??null,lat:p.location?.latitude,lng:p.location?.longitude,photo:p.photos?.[0]?.name||null,googleMapsUri:p.googleMapsUri||null,websiteUri:p.websiteUri||null,openNow:p.currentOpeningHours?.openNow??null,primaryType:p.primaryType||null,priceLevel:p.priceLevel||null}))});
+  const next=data.nextPageToken?{q:cursor.q,token:data.nextPageToken}:cursor.q+1<queries.length?{q:cursor.q+1,token:null}:null;
+  res.set('Cache-Control','private, no-store');res.json({city,category,attribution:'Place information provided by Google Maps',places:(data.places||[]).map(p=>({id:p.id,name:p.displayName?.text||'Unnamed place',city,category,description:p.formattedAddress||'',rating:p.rating??null,reviews:p.userRatingCount??null,lat:p.location?.latitude,lng:p.location?.longitude,photo:p.photos?.[0]?.name||null,googleMapsUri:p.googleMapsUri||null,websiteUri:p.websiteUri||null,openNow:p.currentOpeningHours?.openNow??null,primaryType:p.primaryType||null,priceLevel:p.priceLevel||null})),nextCursor:next?encodeCursor(next):null});
  }catch(e){console.error('Places request:',e);err(res,502,'Could not connect to Google Places.');}
 });
 app.get('/api/photo',async(req,res)=>{const name=String(req.query.name||'');if(!/^places\/[^/]+\/photos\/[^/]+$/.test(name))return err(res,400,'Invalid photo reference');if(!key())return err(res,503,'API key missing');try{const r=await fetch(`https://places.googleapis.com/v1/${name}/media?maxWidthPx=1000&skipHttpRedirect=true`,{headers:{'X-Goog-Api-Key':key()}});const raw=await r.text();let data;try{data=JSON.parse(raw)}catch{return err(res,502,'Invalid photo response')}if(!r.ok||!data.photoUri)return err(res,502,'Photo unavailable');const photo=await fetch(data.photoUri);if(!photo.ok)return err(res,502,'Photo unavailable');res.set('Content-Type',photo.headers.get('content-type')||'image/jpeg');res.set('Cache-Control','private, max-age=300');res.send(Buffer.from(await photo.arrayBuffer()));}catch{return err(res,502,'Photo unavailable')}});
